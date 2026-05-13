@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StudySync</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #080E1A; font-family: 'DM Sans', sans-serif; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0F1828; }
+    ::-webkit-scrollbar-thumb { background: #1F2E42; border-radius: 3px; }
+    textarea, input { color-scheme: dark; }
+    @keyframes pulse {
+      0%,100% { opacity: 0.3; transform: scale(0.8); }
+      50%      { opacity: 1;   transform: scale(1);   }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .view-enter { animation: fadeIn 0.22s ease; }
+    .nav-btn:hover { background: rgba(232,160,32,0.08) !important; color: #E8A020 !important; }
+    .card-hover:hover { background: #1C2A40 !important; border-color: rgba(232,160,32,0.2) !important; }
+    .note-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+    .note-card { transition: transform 0.15s, box-shadow 0.15s; }
+    .task-card:hover { border-color: rgba(232,160,32,0.3) !important; }
+    .task-card { transition: border-color 0.15s; }
+    .btn-primary:hover { background: #F5B840 !important; }
+    .btn-primary { transition: background 0.15s; }
+    .suggestion-btn:hover { background: #1C2A40 !important; color: #E2EAF4 !important; }
+    .suggestion-btn { transition: all 0.15s; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    /* ─── THEME ─────────────────────────────────────────────────────────────── */
+    const C = {
+      bg:          "#080E1A",
+      surface:     "#0F1828",
+      card:        "#162032",
+      cardHover:   "#1C2A40",
+      border:      "#1F2E42",
+      borderLight: "#253448",
+      accent:      "#E8A020",
+      accentGlow:  "rgba(232,160,32,0.15)",
+      accentBorder:"rgba(232,160,32,0.3)",
+      blue:        "#3B82F6",
+      green:       "#10B981",
+      greenGlow:   "rgba(16,185,129,0.12)",
+      red:         "#EF4444",
+      purple:      "#A855F7",
+      text:        "#E2EAF4",
+      textMuted:   "#637080",
+      textSub:     "#8A9BAD",
+    };
+
+    /* ─── DATA ───────────────────────────────────────────────────────────────── */
+    const INIT_NOTES = [
+      { id:1, title:"Data Structures – AVL Trees",       course:"CSE 301",  content:"AVL trees maintain balance factor between -1 and 1. Rotations: LL, RR, LR, RL. Height = O(log n).",                                                                   color:C.blue,   updated:"2h ago",    pinned:true  },
+      { id:2, title:"Calculus III – Surface Integrals",  course:"MATH 302", content:"∬_S F·dS = ∬_D F(r(u,v))·(r_u × r_v) dA. Stokes' theorem connects surface and line integrals.",                                                                        color:C.purple, updated:"Yesterday", pinned:false },
+      { id:3, title:"OS – Process Scheduling",           course:"CSE 340",  content:"FCFS, SJF, Round Robin (quantum q), Priority Scheduling. Context switching overhead. Convoy effect in FCFS.",                                                            color:C.green,  updated:"3 days ago",pinned:false },
+      { id:4, title:"Networks – TCP/IP Stack",           course:"CSE 450",  content:"5 layers: Application, Transport, Network, Data Link, Physical. TCP: 3-way handshake. UDP: connectionless.",                                                             color:C.accent, updated:"4 days ago",pinned:false },
+    ];
+
+    const INIT_TASKS = {
+      todo:     [
+        { id:1, title:"Complete AVL tree implementation",  course:"CSE 301",  due:"May 16", priority:"high"   },
+        { id:2, title:"Read Ch.7 – Memory Management",     course:"CSE 340",  due:"May 18", priority:"medium" },
+        { id:3, title:"Problem Set 4",                     course:"MATH 302", due:"May 20", priority:"low"    },
+      ],
+      progress: [
+        { id:4, title:"StudySync Project Proposal",        course:"CSE 499",  due:"May 15", priority:"high"   },
+        { id:5, title:"TCP/IP Lab Report",                 course:"CSE 450",  due:"May 17", priority:"medium" },
+      ],
+      done:     [
+        { id:6, title:"Midterm review session",            course:"MATH 302", due:"May 10", priority:"high"   },
+        { id:7, title:"Git workflow tutorial",             course:"CSE 499",  due:"May 8",  priority:"low"    },
+      ],
+    };
+
+    const GROUPS = [
+      { id:1, name:"CSE 499 Capstone",      members:["Joel","Ethan","Jonathan","Taskudzwa"], course:"CSE 499",  active:true,  color:C.accent, next:"Today 4:00 PM",     tasks:8 },
+      { id:2, name:"Algorithms Study Pod",  members:["Joel","Amara","Kibet"],                course:"CSE 301",  active:true,  color:C.blue,   next:"Tomorrow 2:00 PM",  tasks:3 },
+      { id:3, name:"Calc III Crashers",     members:["Joel","Faith","David","Nia"],          course:"MATH 302", active:false, color:C.purple, next:"May 19 10:00 AM",   tasks:5 },
+    ];
+
+    const STATS = [
+      { label:"Hours This Week", value:"24.5",   icon:"⏱", delta:"+3.2h",         color:C.accent },
+      { label:"Notes Created",   value:"18",     icon:"📝", delta:"+4 this week",  color:C.blue   },
+      { label:"Tasks Completed", value:"12",     icon:"✅", delta:"+5 this week",  color:C.green  },
+      { label:"Study Streak",    value:"7 days", icon:"🔥", delta:"Personal best!", color:C.purple },
+    ];
+
+    const NOTE_COLORS = [C.blue, C.purple, C.green, C.accent, "#F43F5E", "#06B6D4"];
+
+    /* ─── HELPERS ────────────────────────────────────────────────────────────── */
+    function Avatar({ name, size=28, color=C.accent }) {
+      const initials = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+      return (
+        <div style={{ width:size, height:size, borderRadius:"50%", background:color+"33",
+                      border:`1px solid ${color}55`, display:"flex", alignItems:"center",
+                      justifyContent:"center", fontSize:size*0.35, fontWeight:600,
+                      color, flexShrink:0 }}>
+          {initials}
+        </div>
+      );
+    }
+
+    function Badge({ priority }) {
+      const map = { high:["#EF4444","#3D1515"], medium:[C.accent,"#3D2800"], low:[C.green,"#0D2D1E"] };
+      const [clr, bg] = map[priority] || map.low;
+      return (
+        <span style={{ fontSize:10, padding:"2px 7px", borderRadius:20, background:bg,
+                       color:clr, fontWeight:600, letterSpacing:"0.05em", textTransform:"uppercase" }}>
+          {priority}
+        </span>
+      );
+    }
+
+    function Section({ title, sub, children }) {
+      return (
+        <div className="view-enter" style={{ padding:"32px 36px", maxWidth:1100 }}>
+          <div style={{ marginBottom:24 }}>
+            <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.text, margin:0 }}>{title}</h2>
+            {sub && <p style={{ color:C.textMuted, fontSize:12, marginTop:4 }}>{sub}</p>}
+          </div>
+          {children}
+        </div>
+      );
+    }
+
+    /* ─── SIDEBAR ────────────────────────────────────────────────────────────── */
+    const NAV = [
+      { id:"dashboard", label:"Dashboard",    icon:"◈" },
+      { id:"ai",        label:"AI Assistant", icon:"◉" },
+      { id:"notes",     label:"Notes",        icon:"◧" },
+      { id:"tasks",     label:"Tasks",        icon:"◫" },
+      { id:"groups",    label:"Study Groups", icon:"◎" },
+      { id:"analytics", label:"Analytics",    icon:"◈" },
+    ];
+
+    function Sidebar({ active, setActive, collapsed, setCollapsed }) {
+      return (
+        <div style={{ width:collapsed?64:220, background:C.surface, borderRight:`1px solid ${C.border}`,
+                      display:"flex", flexDirection:"column", transition:"width 0.25s",
+                      flexShrink:0, height:"100vh", position:"sticky", top:0 }}>
+          {/* Logo */}
+          <div style={{ padding:collapsed?"20px 0":"20px 20px", display:"flex", alignItems:"center",
+                        gap:10, borderBottom:`1px solid ${C.border}`,
+                        justifyContent:collapsed?"center":"flex-start" }}>
+            <div style={{ width:32, height:32, borderRadius:8,
+                          background:`linear-gradient(135deg,${C.accent},#C87000)`,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:16, flexShrink:0 }}>⚡</div>
+            {!collapsed && <span style={{ fontFamily:"'Playfair Display',serif", fontWeight:700,
+                                          fontSize:18, color:C.text }}>StudySync</span>}
+          </div>
+
+          {/* Nav links */}
+          <nav style={{ flex:1, padding:"12px 0", overflowY:"auto" }}>
+            {NAV.map(item => (
+              <button key={item.id} className="nav-btn"
+                onClick={() => setActive(item.id)}
+                style={{ width:"100%", padding:collapsed?"10px 0":"10px 16px",
+                         display:"flex", alignItems:"center", gap:10,
+                         background:active===item.id ? C.accentGlow : "transparent",
+                         borderLeft:active===item.id ? `2px solid ${C.accent}` : "2px solid transparent",
+                         borderTop:"none", borderRight:"none", borderBottom:"none",
+                         color:active===item.id ? C.accent : C.textSub,
+                         fontSize:13, fontWeight:active===item.id?600:400,
+                         cursor:"pointer", transition:"all 0.15s",
+                         fontFamily:"'DM Sans',sans-serif",
+                         justifyContent:collapsed?"center":"flex-start" }}>
+                <span style={{ fontSize:16, flexShrink:0 }}>{item.icon}</span>
+                {!collapsed && item.label}
+              </button>
+            ))}
+          </nav>
+
+          {/* User chip */}
+          <div style={{ padding:collapsed?"12px 0":"12px 16px", borderTop:`1px solid ${C.border}`,
+                        display:"flex", alignItems:"center", gap:10,
+                        justifyContent:collapsed?"center":"flex-start" }}>
+            <Avatar name="Joel Ndiba" size={32} color={C.accent} />
+            {!collapsed && (
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:C.text }}>Joel Ndiba</div>
+                <div style={{ fontSize:10, color:C.textMuted }}>CSE 499 · Nairobi</div>
+              </div>
+            )}
+          </div>
+
+          <button onClick={() => setCollapsed(!collapsed)}
+            style={{ margin:"0 auto 12px", background:C.card, border:`1px solid ${C.border}`,
+                     borderRadius:6, color:C.textMuted, cursor:"pointer",
+                     padding:"4px 10px", fontSize:11, fontFamily:"'DM Sans',sans-serif" }}>
+            {collapsed ? "›" : "‹ Hide"}
+          </button>
+        </div>
+      );
+    }
+
+    /* ─── DASHBOARD ──────────────────────────────────────────────────────────── */
+    function Dashboard({ setActive }) {
+      return (
+        <div className="view-enter" style={{ padding:"32px 36px", maxWidth:1100 }}>
+          <div style={{ marginBottom:28 }}>
+            <h1 style={{ fontFamily:"'Playfair Display',serif", fontSize:28,
+                         fontWeight:700, color:C.text }}>Good afternoon, Joel ✦</h1>
+            <p style={{ color:C.textMuted, fontSize:13, marginTop:4 }}>
+              Thursday, May 14, 2026 · Finals season is here — let's make it count.
+            </p>
+          </div>
+
+          {/* Stats row */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:28 }}>
+            {STATS.map((s,i) => (
+              <div key={i} style={{ background:C.card, border:`1px solid ${C.border}`,
+                                    borderRadius:12, padding:"18px 20px", position:"relative", overflow:"hidden" }}>
+                <div style={{ position:"absolute", top:-10, right:-10, fontSize:48, opacity:0.06 }}>{s.icon}</div>
+                <div style={{ fontSize:11, color:C.textMuted, textTransform:"uppercase",
+                              letterSpacing:"0.08em", marginBottom:6 }}>{s.label}</div>
+                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:26, fontWeight:700, color:C.text }}>{s.value}</div>
+                <div style={{ fontSize:11, color:s.color, marginTop:4 }}>↑ {s.delta}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 2-col grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+
+            {/* Deadlines */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:22 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:C.text, margin:0 }}>Upcoming Deadlines</h3>
+                <button onClick={() => setActive("tasks")}
+                  style={{ fontSize:11, color:C.accent, background:"none", border:"none", cursor:"pointer" }}>
+                  View all →
+                </button>
+              </div>
+              {[...INIT_TASKS.todo,...INIT_TASKS.progress].slice(0,4).map(t => (
+                <div key={t.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                                         padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+                  <div>
+                    <div style={{ fontSize:13, color:C.text, fontWeight:500 }}>{t.title}</div>
+                    <div style={{ fontSize:11, color:C.textMuted, marginTop:2 }}>{t.course}</div>
+                  </div>
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ fontSize:11, color:t.priority==="high"?"#EF4444":C.accent,
+                                  fontWeight:600, marginBottom:3 }}>Due {t.due}</div>
+                    <Badge priority={t.priority} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Groups */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:22 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:C.text, margin:0 }}>Study Groups</h3>
+                <button onClick={() => setActive("groups")}
+                  style={{ fontSize:11, color:C.accent, background:"none", border:"none", cursor:"pointer" }}>
+                  View all →
+                </button>
+              </div>
+              {GROUPS.map(g => (
+                <div key={g.id} style={{ display:"flex", alignItems:"center", gap:12,
+                                          padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+                  <div style={{ width:36, height:36, borderRadius:8, background:g.color+"22",
+                                border:`1px solid ${g.color}44`, display:"flex",
+                                alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>◎</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, color:C.text, fontWeight:500 }}>{g.name}</div>
+                    <div style={{ fontSize:11, color:C.textMuted, marginTop:2 }}>{g.members.length} members · {g.next}</div>
+                  </div>
+                  <div style={{ width:8, height:8, borderRadius:"50%",
+                                background:g.active?C.green:C.textMuted, flexShrink:0 }} />
+                </div>
+              ))}
+            </div>
+
+            {/* Recent Notes */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:22 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:C.text, margin:0 }}>Recent Notes</h3>
+                <button onClick={() => setActive("notes")}
+                  style={{ fontSize:11, color:C.accent, background:"none", border:"none", cursor:"pointer" }}>
+                  View all →
+                </button>
+              </div>
+              {INIT_NOTES.slice(0,3).map(n => (
+                <div key={n.id} style={{ display:"flex", alignItems:"flex-start", gap:10,
+                                          padding:"10px 0", borderBottom:`1px solid ${C.border}` }}>
+                  <div style={{ width:4, height:38, borderRadius:4, background:n.color, flexShrink:0, marginTop:2 }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, color:C.text, fontWeight:500 }}>{n.title}</div>
+                    <div style={{ fontSize:11, color:C.textMuted, marginTop:2, lineHeight:1.4 }}>
+                      {n.content.slice(0,60)}…
+                    </div>
+                  </div>
+                  <div style={{ fontSize:10, color:C.textMuted, flexShrink:0 }}>{n.updated}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* AI CTA */}
+            <div onClick={() => setActive("ai")} className="card-hover"
+              style={{ background:"linear-gradient(135deg,#0F1C30 0%,#1A1008 100%)",
+                       border:`1px solid ${C.accentBorder}`, borderRadius:14,
+                       padding:22, cursor:"pointer", position:"relative", overflow:"hidden" }}>
+              <div style={{ position:"absolute", inset:0,
+                            background:`radial-gradient(circle at 80% 20%,${C.accentGlow},transparent 60%)` }} />
+              <div style={{ position:"relative" }}>
+                <div style={{ fontSize:32, marginBottom:12 }}>◉</div>
+                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:C.text,
+                             margin:"0 0 8px" }}>AI Study Assistant</h3>
+                <p style={{ fontSize:13, color:C.textSub, lineHeight:1.6, margin:"0 0 18px" }}>
+                  Ask anything about your courses. Summarize notes, generate flashcards,
+                  explain complex topics — powered by Claude.
+                </p>
+                <div style={{ display:"inline-flex", alignItems:"center", gap:6,
+                              background:C.accent, color:"#000", padding:"9px 18px",
+                              borderRadius:20, fontSize:12, fontWeight:600 }}>
+                  Open Assistant →
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── AI ASSISTANT ───────────────────────────────────────────────────────── */
+    const AI_SYSTEM = `You are StudySync AI — an intelligent academic assistant for Joel Ndiba Mwaura, a computer science student in Nairobi taking: CSE 499 (Capstone), CSE 301 (Data Structures), CSE 340 (Operating Systems), CSE 450 (Networks), MATH 302 (Calculus III).
+Help with: explaining concepts, summarizing notes, creating flashcards, quizzes, study plans, and academic Q&A. Be concise and pedagogically effective. Use plain text formatting (no markdown symbols). Address the student by first name occasionally.`;
+
+    function AIAssistant() {
+      const [msgs, setMsgs]     = useState([{ role:"assistant", content:"Hello Joel! I'm your StudySync AI assistant. I can help you understand your coursework, summarize notes, generate flashcards, or answer any academic question. What would you like to work on today?" }]);
+      const [input, setInput]   = useState("");
+      const [loading, setLoading] = useState(false);
+      const endRef = useRef(null);
+
+      useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs, loading]);
+
+      async function send() {
+        if (!input.trim() || loading) return;
+        const userMsg = { role:"user", content:input.trim() };
+        const updated = [...msgs, userMsg];
+        setMsgs(updated);
+        setInput("");
+        setLoading(true);
+        try {
+          const res = await fetch("https://api.anthropic.com/v1/messages", {
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body: JSON.stringify({
+              model:"claude-sonnet-4-20250514",
+              max_tokens:1000,
+              system: AI_SYSTEM,
+              messages: updated.map(m => ({ role:m.role, content:m.content }))
+            })
+          });
+          const data = await res.json();
+          const reply = data.content?.[0]?.text || "Sorry, I couldn't generate a response.";
+          setMsgs(prev => [...prev, { role:"assistant", content:reply }]);
+        } catch {
+          setMsgs(prev => [...prev, { role:"assistant", content:"Something went wrong. Please try again." }]);
+        }
+        setLoading(false);
+      }
+
+      const suggestions = ["Explain AVL tree rotations", "Create flashcards for TCP/IP", "Summarize process scheduling", "Help me plan for finals"];
+
+      return (
+        <div className="view-enter"
+          style={{ display:"flex", flexDirection:"column", height:"100vh",
+                   padding:"28px 36px", maxWidth:820 }}>
+          <div style={{ marginBottom:20 }}>
+            <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.text }}>◉ AI Study Assistant</h2>
+            <p style={{ color:C.textMuted, fontSize:12, marginTop:4 }}>Powered by Claude · Your personal academic tutor</p>
+          </div>
+
+          {/* Messages */}
+          <div style={{ flex:1, overflowY:"auto", background:C.card,
+                        border:`1px solid ${C.border}`, borderRadius:14,
+                        padding:20, display:"flex", flexDirection:"column",
+                        gap:16, marginBottom:14 }}>
+            {msgs.map((m,i) => (
+              <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start",
+                                    flexDirection:m.role==="user"?"row-reverse":"row" }}>
+                {m.role==="assistant"
+                  ? <div style={{ width:32, height:32, borderRadius:"50%", background:C.accentGlow,
+                                  border:`1px solid ${C.accentBorder}`, display:"flex",
+                                  alignItems:"center", justifyContent:"center",
+                                  fontSize:14, flexShrink:0 }}>◉</div>
+                  : <Avatar name="Joel Ndiba" size={32} />
+                }
+                <div style={{ maxWidth:"75%",
+                              background:m.role==="user" ? `linear-gradient(135deg,${C.accent}22,${C.accent}11)` : C.surface,
+                              border:`1px solid ${m.role==="user" ? C.accentBorder : C.border}`,
+                              borderRadius:m.role==="user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                              padding:"12px 16px", fontSize:13, color:C.text,
+                              lineHeight:1.65, whiteSpace:"pre-wrap" }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+                <div style={{ width:32, height:32, borderRadius:"50%", background:C.accentGlow,
+                              border:`1px solid ${C.accentBorder}`, display:"flex",
+                              alignItems:"center", justifyContent:"center", fontSize:14 }}>◉</div>
+                <div style={{ background:C.surface, border:`1px solid ${C.border}`,
+                              borderRadius:"14px 14px 14px 4px", padding:"12px 16px",
+                              display:"flex", gap:5, alignItems:"center" }}>
+                  {[0,1,2].map(i => (
+                    <div key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.accent,
+                                          animation:"pulse 1.2s infinite",
+                                          animationDelay:`${i*0.2}s` }} />
+                  ))}
+                </div>
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+
+          {/* Suggestion chips */}
+          {msgs.length <= 1 && (
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+              {suggestions.map((s,i) => (
+                <button key={i} className="suggestion-btn" onClick={() => setInput(s)}
+                  style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:20,
+                           padding:"6px 14px", fontSize:11, color:C.textSub,
+                           cursor:"pointer", fontFamily:"'DM Sans',sans-serif" }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input bar */}
+          <div style={{ display:"flex", gap:10 }}>
+            <input value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key==="Enter" && !e.shiftKey && send()}
+              placeholder="Ask me anything about your studies…"
+              style={{ flex:1, background:C.card, border:`1px solid ${C.border}`,
+                       borderRadius:10, padding:"12px 16px", fontSize:13,
+                       color:C.text, fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
+            <button onClick={send} disabled={loading || !input.trim()} className="btn-primary"
+              style={{ background:loading||!input.trim() ? C.border : C.accent,
+                       color:loading||!input.trim() ? C.textMuted : "#000",
+                       border:"none", borderRadius:10, padding:"12px 22px",
+                       fontSize:13, fontWeight:600, cursor:loading||!input.trim()?"not-allowed":"pointer",
+                       fontFamily:"'DM Sans',sans-serif" }}>
+              Send
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── NOTES ──────────────────────────────────────────────────────────────── */
+    function NoteCard({ note }) {
+      return (
+        <div className="note-card"
+          style={{ background:C.card, border:`1px solid ${C.border}`,
+                   borderRadius:12, padding:18, cursor:"pointer",
+                   position:"relative", overflow:"hidden" }}>
+          <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:note.color }} />
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, marginTop:6 }}>
+            <span style={{ fontSize:10, color:note.color, background:note.color+"22",
+                           padding:"2px 8px", borderRadius:12, fontWeight:600 }}>{note.course}</span>
+            <span style={{ fontSize:10, color:C.textMuted }}>{note.updated}</span>
+          </div>
+          <h4 style={{ fontWeight:600, fontSize:14, color:C.text, marginBottom:8, lineHeight:1.3 }}>{note.title}</h4>
+          <p style={{ fontSize:12, color:C.textSub, lineHeight:1.55, margin:0,
+                      display:"-webkit-box", WebkitLineClamp:3,
+                      WebkitBoxOrient:"vertical", overflow:"hidden" }}>{note.content}</p>
+        </div>
+      );
+    }
+
+    function Notes() {
+      const [notes, setNotes] = useState(INIT_NOTES);
+      const [search, setSearch] = useState("");
+      const [creating, setCreating] = useState(false);
+      const [newNote, setNewNote] = useState({ title:"", course:"", content:"" });
+
+      const filtered = notes.filter(n =>
+        n.title.toLowerCase().includes(search.toLowerCase()) ||
+        n.course.toLowerCase().includes(search.toLowerCase())
+      );
+
+      function create() {
+        if (!newNote.title.trim()) return;
+        setNotes(prev => [{
+          id:Date.now(), ...newNote,
+          color:NOTE_COLORS[prev.length % NOTE_COLORS.length],
+          updated:"Just now", pinned:false
+        }, ...prev]);
+        setNewNote({ title:"", course:"", content:"" });
+        setCreating(false);
+      }
+
+      return (
+        <div className="view-enter" style={{ padding:"32px 36px", maxWidth:1100 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+            <div>
+              <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.text }}>◧ Notes</h2>
+              <p style={{ color:C.textMuted, fontSize:12, marginTop:4 }}>{notes.length} notes across your courses</p>
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search notes…"
+                style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:8,
+                         padding:"8px 14px", fontSize:12, color:C.text, outline:"none", width:200 }} />
+              <button onClick={() => setCreating(true)} className="btn-primary"
+                style={{ background:C.accent, color:"#000", border:"none",
+                         borderRadius:8, padding:"8px 16px", fontSize:12,
+                         fontWeight:600, cursor:"pointer" }}>
+                + New Note
+              </button>
+            </div>
+          </div>
+
+          {creating && (
+            <div style={{ background:C.card, border:`1px solid ${C.accentBorder}`,
+                          borderRadius:14, padding:20, marginBottom:24 }}>
+              <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:15, color:C.text, marginBottom:14 }}>New Note</h3>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                <input value={newNote.title} onChange={e => setNewNote(p=>({...p,title:e.target.value}))}
+                  placeholder="Note title"
+                  style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8,
+                           padding:"9px 12px", fontSize:13, color:C.text, outline:"none" }} />
+                <input value={newNote.course} onChange={e => setNewNote(p=>({...p,course:e.target.value}))}
+                  placeholder="Course (e.g. CSE 301)"
+                  style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8,
+                           padding:"9px 12px", fontSize:13, color:C.text, outline:"none" }} />
+              </div>
+              <textarea value={newNote.content} onChange={e => setNewNote(p=>({...p,content:e.target.value}))}
+                placeholder="Start writing your notes…" rows={4}
+                style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`,
+                         borderRadius:8, padding:"9px 12px", fontSize:13,
+                         color:C.text, outline:"none", resize:"vertical" }} />
+              <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                <button onClick={create} className="btn-primary"
+                  style={{ background:C.accent, color:"#000", border:"none",
+                           borderRadius:8, padding:"8px 16px", fontSize:12,
+                           fontWeight:600, cursor:"pointer" }}>Save Note</button>
+                <button onClick={() => setCreating(false)}
+                  style={{ background:C.surface, color:C.textSub, border:`1px solid ${C.border}`,
+                           borderRadius:8, padding:"8px 16px", fontSize:12, cursor:"pointer" }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {filtered.filter(n=>n.pinned).length>0 && (
+            <>
+              <div style={{ fontSize:11, color:C.textMuted, textTransform:"uppercase",
+                            letterSpacing:"0.08em", marginBottom:10 }}>📌 Pinned</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",
+                            gap:14, marginBottom:24 }}>
+                {filtered.filter(n=>n.pinned).map(n => <NoteCard key={n.id} note={n} />)}
+              </div>
+            </>
+          )}
+
+          <div style={{ fontSize:11, color:C.textMuted, textTransform:"uppercase",
+                        letterSpacing:"0.08em", marginBottom:10 }}>All Notes</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:14 }}>
+            {filtered.map(n => <NoteCard key={n.id} note={n} />)}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── TASKS ──────────────────────────────────────────────────────────────── */
+    function Tasks() {
+      const [board, setBoard]     = useState(INIT_TASKS);
+      const [dragging, setDragging] = useState(null);
+      const [over, setOver]       = useState(null);
+
+      const cols = [
+        { id:"todo",     label:"To Do",       color:C.textMuted, count:board.todo.length     },
+        { id:"progress", label:"In Progress",  color:C.accent,    count:board.progress.length },
+        { id:"done",     label:"Done",         color:C.green,     count:board.done.length     },
+      ];
+
+      function onDrop(targetCol) {
+        if (!dragging || dragging.col===targetCol) { setDragging(null); setOver(null); return; }
+        setBoard(prev => ({
+          ...prev,
+          [dragging.col]: prev[dragging.col].filter(t => t.id!==dragging.task.id),
+          [targetCol]:    [dragging.task, ...prev[targetCol]],
+        }));
+        setDragging(null); setOver(null);
+      }
+
+      return (
+        <div className="view-enter" style={{ padding:"32px 36px" }}>
+          <div style={{ marginBottom:24 }}>
+            <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.text }}>◫ Task Board</h2>
+            <p style={{ color:C.textMuted, fontSize:12, marginTop:4 }}>Drag tasks between columns to update status</p>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:18, minHeight:500 }}>
+            {cols.map(col => (
+              <div key={col.id}
+                onDragOver={e => { e.preventDefault(); setOver(col.id); }}
+                onDrop={() => onDrop(col.id)}
+                style={{ background:over===col.id ? C.cardHover : C.card,
+                         border:`1px solid ${over===col.id ? C.accentBorder : C.border}`,
+                         borderRadius:14, padding:18, transition:"all 0.15s" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:col.color }} />
+                    <span style={{ fontWeight:600, fontSize:13, color:C.text }}>{col.label}</span>
+                  </div>
+                  <span style={{ background:C.surface, borderRadius:12, padding:"2px 8px",
+                                 fontSize:11, color:C.textMuted }}>{col.count}</span>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  {board[col.id].map(task => (
+                    <div key={task.id} draggable className="task-card"
+                      onDragStart={() => setDragging({ task, col:col.id })}
+                      style={{ background:C.surface, border:`1px solid ${C.borderLight}`,
+                               borderRadius:10, padding:"12px 14px", cursor:"grab",
+                               opacity:dragging?.task.id===task.id ? 0.45 : 1 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between",
+                                    alignItems:"flex-start", marginBottom:8 }}>
+                        <div style={{ fontSize:13, color:C.text, fontWeight:500,
+                                      lineHeight:1.3, flex:1, marginRight:8 }}>{task.title}</div>
+                        {col.id==="done" && <span style={{ fontSize:13, color:C.green }}>✓</span>}
+                      </div>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <span style={{ fontSize:10, color:C.accent, background:C.accentGlow,
+                                       padding:"2px 7px", borderRadius:12, fontWeight:600 }}>{task.course}</span>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <Badge priority={task.priority} />
+                          <span style={{ fontSize:10, color:C.textMuted }}>Due {task.due}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── GROUPS ─────────────────────────────────────────────────────────────── */
+    function Groups() {
+      return (
+        <div className="view-enter" style={{ padding:"32px 36px", maxWidth:900 }}>
+          <div style={{ marginBottom:24 }}>
+            <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.text }}>◎ Study Groups</h2>
+            <p style={{ color:C.textMuted, fontSize:12, marginTop:4 }}>Coordinate, collaborate, and conquer together</p>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+            {GROUPS.map(g => (
+              <div key={g.id} className="card-hover"
+                style={{ background:C.card, border:`1px solid ${C.border}`,
+                         borderRadius:14, padding:22, position:"relative", overflow:"hidden",
+                         transition:"all 0.15s" }}>
+                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:14 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:44, height:44, borderRadius:10, background:g.color+"22",
+                                  border:`1.5px solid ${g.color}44`, display:"flex",
+                                  alignItems:"center", justifyContent:"center", fontSize:20 }}>◎</div>
+                    <div>
+                      <div style={{ fontSize:15, fontWeight:600, color:C.text }}>{g.name}</div>
+                      <div style={{ fontSize:11, color:g.color, marginTop:2 }}>{g.course}</div>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:5,
+                                background:g.active?C.greenGlow:C.surface,
+                                border:`1px solid ${g.active?C.green+"44":C.border}`,
+                                borderRadius:20, padding:"3px 9px" }}>
+                    <div style={{ width:6, height:6, borderRadius:"50%",
+                                  background:g.active?C.green:C.textMuted }} />
+                    <span style={{ fontSize:10, color:g.active?C.green:C.textMuted }}>
+                      {g.active?"Active":"Idle"}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:6, marginBottom:14 }}>
+                  {g.members.map((m,i) => <Avatar key={i} name={m} size={28} color={g.color} />)}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+                  {[["Next Meeting",g.next],["Open Tasks",`${g.tasks} tasks`]].map(([lbl,val]) => (
+                    <div key={lbl} style={{ background:C.surface, borderRadius:8, padding:"10px 12px" }}>
+                      <div style={{ fontSize:10, color:C.textMuted, textTransform:"uppercase",
+                                    letterSpacing:"0.06em", marginBottom:4 }}>{lbl}</div>
+                      <div style={{ fontSize:12, color:C.text, fontWeight:500 }}>{val}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button style={{ flex:1, background:g.color+"22", color:g.color,
+                                   border:`1px solid ${g.color}44`, borderRadius:8,
+                                   padding:"8px 0", fontSize:12, fontWeight:600,
+                                   cursor:"pointer" }}>Open Workspace</button>
+                  <button style={{ background:C.surface, color:C.textSub,
+                                   border:`1px solid ${C.border}`, borderRadius:8,
+                                   padding:"8px 14px", fontSize:12, cursor:"pointer" }}>Chat</button>
+                </div>
+              </div>
+            ))}
+
+            {/* New Group CTA */}
+            <div style={{ background:C.surface, border:`2px dashed ${C.border}`,
+                          borderRadius:14, padding:22, display:"flex", flexDirection:"column",
+                          alignItems:"center", justifyContent:"center", gap:12,
+                          cursor:"pointer", minHeight:220 }}>
+              <div style={{ fontSize:28, opacity:0.4 }}>+</div>
+              <div style={{ fontSize:13, color:C.textMuted, textAlign:"center" }}>
+                Create or join a<br/>new study group
+              </div>
+              <button className="btn-primary"
+                style={{ background:C.accent, color:"#000", border:"none",
+                         borderRadius:8, padding:"8px 16px", fontSize:12,
+                         fontWeight:600, cursor:"pointer" }}>Find Groups</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── ANALYTICS ──────────────────────────────────────────────────────────── */
+    function Analytics() {
+      const days  = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+      const hours = [3.5, 4.2, 2.8, 5.0, 4.8, 6.2, 3.1];
+      const maxH  = Math.max(...hours);
+      const courses = [
+        { name:"CSE 499",  pct:35, color:C.accent  },
+        { name:"CSE 301",  pct:28, color:C.blue    },
+        { name:"CSE 340",  pct:20, color:C.purple  },
+        { name:"CSE 450",  pct:10, color:C.green   },
+        { name:"MATH 302", pct:7,  color:"#F43F5E" },
+      ];
+
+      return (
+        <div className="view-enter" style={{ padding:"32px 36px", maxWidth:1000 }}>
+          <div style={{ marginBottom:24 }}>
+            <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:22, color:C.text }}>◈ Analytics</h2>
+            <p style={{ color:C.textMuted, fontSize:12, marginTop:4 }}>Your study habits at a glance · Week of May 8–14</p>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:20, marginBottom:20 }}>
+            {/* Bar chart */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:24 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:20 }}>Hours Studied Per Day</div>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:10, height:140 }}>
+                {days.map((day,i) => (
+                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+                    <div style={{ fontSize:10, color:C.textMuted }}>{hours[i]}h</div>
+                    <div style={{ width:"100%", background:i===3?C.accent:C.accent+"55",
+                                  borderRadius:"4px 4px 0 0",
+                                  height:`${(hours[i]/maxH)*100}px`, minHeight:4 }} />
+                    <div style={{ fontSize:10, color:i===3?C.accent:C.textMuted,
+                                  fontWeight:i===3?600:400 }}>{day}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Course breakdown */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:14, padding:24 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:18 }}>Time by Course</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {courses.map((c,i) => (
+                  <div key={i}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                      <span style={{ fontSize:11, color:C.textSub }}>{c.name}</span>
+                      <span style={{ fontSize:11, color:c.color, fontWeight:600 }}>{c.pct}%</span>
+                    </div>
+                    <div style={{ background:C.surface, borderRadius:4, height:6, overflow:"hidden" }}>
+                      <div style={{ width:`${c.pct}%`, height:"100%", background:c.color, borderRadius:4 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Summary cards */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14 }}>
+            {[
+              { label:"Total Hours",  value:"29.6h",  sub:"This week",   icon:"⏱" },
+              { label:"Avg Session",  value:"1h 45m", sub:"Per session", icon:"📊" },
+              { label:"Flashcards",   value:"84",     sub:"Reviewed",    icon:"🃏" },
+              { label:"Notes Saved",  value:"18",     sub:"This week",   icon:"📝" },
+            ].map((s,i) => (
+              <div key={i} style={{ background:C.card, border:`1px solid ${C.border}`,
+                                    borderRadius:12, padding:"16px 18px" }}>
+                <div style={{ fontSize:20, marginBottom:8 }}>{s.icon}</div>
+                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22,
+                              fontWeight:700, color:C.text, marginBottom:2 }}>{s.value}</div>
+                <div style={{ fontSize:11, color:C.textMuted }}>{s.label}</div>
+                <div style={{ fontSize:10, color:C.green, marginTop:2 }}>{s.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── ROOT APP ───────────────────────────────────────────────────────────── */
+    function App() {
+      const [active, setActive]     = useState("dashboard");
+      const [collapsed, setCollapsed] = useState(false);
+
+      const views = {
+        dashboard: <Dashboard setActive={setActive} />,
+        ai:        <AIAssistant />,
+        notes:     <Notes />,
+        tasks:     <Tasks />,
+        groups:    <Groups />,
+        analytics: <Analytics />,
+      };
+
+      return (
+        <div style={{ display:"flex", background:C.bg, minHeight:"100vh", color:C.text }}>
+          <Sidebar active={active} setActive={setActive}
+                   collapsed={collapsed} setCollapsed={setCollapsed} />
+          <main style={{ flex:1, overflowY:"auto", minHeight:"100vh" }}>
+            {views[active]}
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
