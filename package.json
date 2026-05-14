@@ -1,0 +1,13 @@
+{
+  "name": "studysync",
+  "version": "1.0.0",
+  "description": "StudySync web app Development and Production",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
